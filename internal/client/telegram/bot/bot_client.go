@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -11,8 +12,8 @@ type TelegramBotClient struct {
 	b *bot.Bot
 }
 
-func NewTelegramBotClient(bot *bot.Bot) TelegramBotClient {
-	return TelegramBotClient{b: bot}
+func NewTelegramBotClient(bot *bot.Bot) *TelegramBotClient {
+	return &TelegramBotClient{b: bot}
 }
 
 func (t *TelegramBotClient) GetChatInfo(ctx context.Context, username string) (*models.ChatFullInfo, error) {
@@ -22,7 +23,7 @@ func (t *TelegramBotClient) GetChatInfo(ctx context.Context, username string) (*
 	})
 
 	if err != nil {
-		return &models.ChatFullInfo{}, err
+		return nil, fmt.Errorf("API call failed: %w", err)
 	}
 
 	return chat, nil

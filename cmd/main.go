@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"post-analyzer/internal/client/ai"
 	"post-analyzer/internal/client/telegram/bot"
 	"post-analyzer/internal/client/telegram/user"
 	"post-analyzer/internal/handlers"
@@ -16,7 +17,7 @@ import (
 )
 
 func main() {
-
+	// loading env variables
 	if err := godotenv.Load(); err != nil {
 		log.Fatalf("Failed to load env variables: %v", err)
 	}
@@ -29,26 +30,39 @@ func main() {
 	var appHash string = os.Getenv("APP_HASH")
 	var storagePath string = os.Getenv("STORAGE_PATH")
 	var sessionPath string = os.Getenv("SESSION_PATH")
+	var openRouterApiKey string = os.Getenv("OPEN_ROUTER_API_KEY")
 
-	botHandler, err := tgBot.New(token)
-	if err != nil {
-		log.Fatalf("Failed to register bot: %v", err)
-	}
-	userClient, err := user.NewTelegramUserClient(appID, appHash, sessionPath)
-	if err != nil {
-		log.Fatalf("Failed to create user client: %v", err)
-	}
-	botClient := bot.NewTelegramBotClient(botHandler)
-
+	// repository
 	repo, err := repository.NewChannelStorage(storagePath)
 	if err != nil {
 		log.Fatalf("Failed to access data storage: %v", err)
 	}
-	serv := service.NewMonitoringService(repo, botClient, userClient)
-	hand := handlers.NewBotHandler(serv)
 
-	botHandler.RegisterHandler(tgBot.HandlerTypeMessageText, "/start", tgBot.MatchTypeExact, hand.StartHandler)
-	botHandler.RegisterHandler(tgBot.HandlerTypeMessageText, "", tgBot.MatchTypePrefix, hand.LinkHandler)
+	// bot registartion
+	botHandler, err := tgBot.New(token)
+	if err != nil {
+		log.Fatalf("Failed to register bot: %v", err)
+	}
+
+	// telegram clients
+	botClient := bot.NewTelegramBotClient(botHandler)
+	userClient, err := user.NewTelegramUserClient(appID, appHash, sessionPath)
+	if err != nil {
+		log.Fatalf("Failed to create user client: %v", err)
+	}
+
+	// OpenRouter client
+	aiClient := ai.NewOpenRouterClient(openRouterApiKey)
+
+	// internal services
+	telegramProvider := service.NewTelegramProvider(userClient, botClient)
+	analysisProvider := service.NewAnalysisProvider(aiClient)
+
+	service := service.NewMonitoringService(repo, analysisProvider, telegramProvider)
+	handler := handlers.NewBotHandler(service)
+
+	botHandler.RegisterHandler(tgBot.HandlerTypeMessageText, "/start", tgBot.MatchTypeExact, handler.StartHandler)
+	botHandler.RegisterHandler(tgBot.HandlerTypeMessageText, "", tgBot.MatchTypePrefix, handler.LinkHandler)
 
 	botHandler.Start(context.Background())
 }

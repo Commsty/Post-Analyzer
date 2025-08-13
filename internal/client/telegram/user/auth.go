@@ -18,16 +18,16 @@ type TelegramUserClient struct {
 	sessionPath string
 }
 
-func NewTelegramUserClient(appID int, appHash string, sessionPath string) (TelegramUserClient, error) {
+func NewTelegramUserClient(appID int, appHash string, sessionPath string) (*TelegramUserClient, error) {
 
 	if _, err := os.Stat(sessionPath); err != nil {
 		directory := filepath.Dir(sessionPath)
 		if err = os.MkdirAll(directory, 0700); err != nil {
-			return TelegramUserClient{}, err
+			return nil, err
 		}
 	}
 
-	client := TelegramUserClient{
+	client := &TelegramUserClient{
 		appID:       appID,
 		appHash:     appHash,
 		sessionPath: sessionPath,
@@ -37,7 +37,7 @@ func NewTelegramUserClient(appID int, appHash string, sessionPath string) (Teleg
 	defer cancel()
 
 	if err := client.authenticate(ctxAuth); err != nil {
-		return TelegramUserClient{}, fmt.Errorf("Authentication error: %w", err)
+		return nil, fmt.Errorf("Authentication error: %w", err)
 	}
 
 	return client, nil

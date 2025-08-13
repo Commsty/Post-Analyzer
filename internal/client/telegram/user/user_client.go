@@ -21,7 +21,7 @@ func (t *TelegramUserClient) GetNewChannelPosts(ctx context.Context, username st
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("Failed to get posts from channel: %w", err)
+		return nil, err
 	}
 
 	return posts, nil
