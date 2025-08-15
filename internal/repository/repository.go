@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,16 +11,16 @@ import (
 )
 
 type ChannelStorageRepository interface {
-	AddNewChannel(entity.ChannelInfo) error
-	GetAllChannels() []entity.ChannelInfo
-	GetChannelByID(int64) (entity.ChannelInfo, error)
-	UpdateChannelByID(entity.ChannelInfo) error
-	DeleteChannelByID(int64) error
+	AddChannelInfo(context.Context, *entity.ChannelInfo) error
+	GetAllChannelInfos(context.Context) ([]*entity.ChannelInfo, error)
+	GetChannelInfos(context.Context, *entity.ChannelInfo) ([]*entity.ChannelInfo, error)
+	UpdateChannelInfo(context.Context, *entity.ChannelInfo) error
+	DeleteChannelInfo(context.Context, *entity.ChannelInfo) error
 }
 
 type jsonStorage struct {
 	filepath     string
-	channelInfos []entity.ChannelInfo
+	channelInfos []*entity.ChannelInfo
 	mutex        sync.Mutex
 }
 
@@ -32,7 +33,7 @@ func NewChannelStorage(path string) (ChannelStorageRepository, error) {
 
 	storage := &jsonStorage{
 		filepath:     absPath,
-		channelInfos: make([]entity.ChannelInfo, 0),
+		channelInfos: make([]*entity.ChannelInfo, 0),
 	}
 
 	if err := storage.load(); err != nil {
@@ -42,69 +43,100 @@ func NewChannelStorage(path string) (ChannelStorageRepository, error) {
 	return storage, nil
 }
 
-func (s *jsonStorage) AddNewChannel(c entity.ChannelInfo) error {
+func (s *jsonStorage) AddChannelInfo(ctx context.Context, c *entity.ChannelInfo) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	for _, channel := range s.channelInfos {
-		if channel.ChannelID == c.ChannelID {
-			return fmt.Errorf("This channel is already monitored: %d", c.ChannelID)
+		if channel.ChannelID == c.ChannelID && channel.ChatID == c.ChatID && channel.ScheduleID == c.ScheduleID {
+			return fmt.Errorf("This channel is already monitored at this time: %d", c.ChannelID)
 		}
 	}
 
 	s.channelInfos = append(s.channelInfos, c)
 
 	if err := s.save(); err != nil {
-		return fmt.Errorf("Unable to save storage changes: %w", err)
+		return fmt.Errorf("Failed to save storage changes: %w", err)
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 
 	return nil
 }
 
-func (s *jsonStorage) GetAllChannels() []entity.ChannelInfo {
-	return append([]entity.ChannelInfo{}, s.channelInfos...)
+func (s *jsonStorage) GetAllChannelInfos(ctx context.Context) ([]*entity.ChannelInfo, error) {
+	infos := make([]*entity.ChannelInfo, 0)
+	infos = append(infos, s.channelInfos...)
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return infos, nil
 }
 
-func (s *jsonStorage) GetChannelByID(id int64) (entity.ChannelInfo, error) {
+func (s *jsonStorage) GetChannelInfos(ctx context.Context, chanInfo *entity.ChannelInfo) ([]*entity.ChannelInfo, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
+	infos := make([]*entity.ChannelInfo, 0)
 	for _, channel := range s.channelInfos {
-		if channel.ChannelID == id {
-			return channel, nil
+		if channel.ChannelID == chanInfo.ChannelID && channel.ChatID == chanInfo.ChatID {
+			infos = append(infos, channel)
 		}
 	}
 
-	return entity.ChannelInfo{}, fmt.Errorf("No channel with such ID: %d", id)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	return infos, nil
 }
 
-func (s *jsonStorage) UpdateChannelByID(c entity.ChannelInfo) error {
+func (s *jsonStorage) UpdateChannelInfo(ctx context.Context, c *entity.ChannelInfo) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	for i := range s.channelInfos {
-		if s.channelInfos[i].ChannelID == c.ChannelID {
+		if s.channelInfos[i].ChannelID == c.ChannelID && s.channelInfos[i].ChatID == c.ChatID {
 			s.channelInfos[i].LastCheckedPostID = c.LastCheckedPostID
-			s.channelInfos[i].ChannelUsername = c.ChannelUsername
-			return s.save()
+
+			err := s.save()
+			if err != nil {
+				return err
+			}
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+
+			return nil
 		}
 	}
 
-	return fmt.Errorf("No channel to update with ID: %d", c.ChannelID)
+	return fmt.Errorf("No channel information found to update")
 }
 
-func (s *jsonStorage) DeleteChannelByID(id int64) error {
+func (s *jsonStorage) DeleteChannelInfo(ctx context.Context, c *entity.ChannelInfo) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	for i := range s.channelInfos {
-		if s.channelInfos[i].ChannelID == id {
+		if s.channelInfos[i].ChannelID == c.ChannelID && s.channelInfos[i].ChatID == c.ChatID && s.channelInfos[i].ScheduleID == c.ScheduleID {
 			s.channelInfos = append(s.channelInfos[:i], s.channelInfos[i+1:]...)
-			return s.save()
+
+			err := s.save()
+			if err != nil {
+				return err
+			}
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+
+			return nil
 		}
 	}
 
-	return fmt.Errorf("No channel to delete with ID: %d", id)
+	return fmt.Errorf("No channel information found to delete")
 }
 
 // some additional methods to work with (de)serialization
@@ -160,7 +192,7 @@ func (s *jsonStorage) load() error {
 	}
 	defer file.Close()
 
-	var channels []entity.ChannelInfo
+	var channels []*entity.ChannelInfo
 	if err := json.NewDecoder(file).Decode(&channels); err != nil {
 		return fmt.Errorf("JSON decoding storage file failed: %w", err)
 	}

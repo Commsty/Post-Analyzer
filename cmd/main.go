@@ -9,6 +9,7 @@ import (
 	"post-analyzer/internal/client/telegram/user"
 	"post-analyzer/internal/handlers"
 	"post-analyzer/internal/repository"
+	"post-analyzer/internal/scheduler"
 	"post-analyzer/internal/service"
 	"strconv"
 
@@ -54,15 +55,21 @@ func main() {
 	// OpenRouter client
 	aiClient := ai.NewOpenRouterClient(openRouterApiKey)
 
+	// scheduler
+	scheduler := scheduler.NewScheduler()
+
 	// internal services
 	telegramProvider := service.NewTelegramProvider(userClient, botClient)
 	analysisProvider := service.NewAnalysisProvider(aiClient)
+	service := service.NewChannelService(repo, scheduler, analysisProvider, telegramProvider)
 
-	service := service.NewMonitoringService(repo, analysisProvider, telegramProvider)
+	// bot messages handler
 	handler := handlers.NewBotHandler(service)
 
+	// bot commands registration
 	botHandler.RegisterHandler(tgBot.HandlerTypeMessageText, "/start", tgBot.MatchTypeExact, handler.StartHandler)
-	botHandler.RegisterHandler(tgBot.HandlerTypeMessageText, "", tgBot.MatchTypePrefix, handler.LinkHandler)
+	botHandler.RegisterHandler(tgBot.HandlerTypeMessageText, "/monitor", tgBot.MatchTypePrefix, handler.MonitorHandler)
 
+	scheduler.Start()
 	botHandler.Start(context.Background())
 }

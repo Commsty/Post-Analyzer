@@ -6,6 +6,7 @@ require (
 	github.com/go-telegram/bot v1.16.0
 	github.com/gotd/td v0.130.0
 	github.com/joho/godotenv v1.5.1
+	github.com/robfig/cron/v3 v3.0.1
 )
 
 require (

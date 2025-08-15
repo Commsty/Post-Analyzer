@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"post-analyzer/internal/client/telegram/bot"
 	"post-analyzer/internal/client/telegram/user"
+	"post-analyzer/internal/entity"
 	"regexp"
 	"strings"
 
@@ -13,10 +14,16 @@ import (
 )
 
 type telegramProvider interface {
-	getNewChannelPosts(context.Context, string, int) ([]*tg.Message, error)
-	getChatInfo(context.Context, string) (*models.ChatFullInfo, error)
+	sendMessage(context.Context, *entity.ChannelInfo, string) (*models.Message, error)
+	getNewChannelPosts(context.Context, *entity.ChannelInfo) ([]*tg.Message, error)
+	getChatInfo(context.Context, *entity.ChannelInfo) (*models.ChatFullInfo, error)
 	validateChannel(context.Context, string) (bool, error)
 	extractUsernameFromIdentificator(string) (string, error)
+}
+
+type telegramService struct {
+	tgcUser *user.TelegramUserClient
+	tgcBot  *bot.TelegramBotClient
 }
 
 func NewTelegramProvider(tgcUser *user.TelegramUserClient, tgcBot *bot.TelegramBotClient) telegramProvider {
@@ -26,14 +33,27 @@ func NewTelegramProvider(tgcUser *user.TelegramUserClient, tgcBot *bot.TelegramB
 	}
 }
 
-type telegramService struct {
-	tgcUser *user.TelegramUserClient
-	tgcBot  *bot.TelegramBotClient
+func (t *telegramService) sendMessage(ctx context.Context, chanInfo *entity.ChannelInfo, text string) (*models.Message, error) {
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	msg, err := t.tgcBot.SendMessage(ctx, chanInfo.ChatID, text)
+	if err != nil {
+		return nil, err
+	}
+
+	return msg, nil
 }
 
-func (t *telegramService) getNewChannelPosts(ctx context.Context, username string, lastReadID int) ([]*tg.Message, error) {
+func (t *telegramService) getNewChannelPosts(ctx context.Context, chanInfo *entity.ChannelInfo) ([]*tg.Message, error) {
 
-	posts, err := t.tgcUser.GetNewChannelPosts(ctx, username, lastReadID)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	posts, err := t.tgcUser.GetNewChannelPosts(ctx, chanInfo.ChannelUsername, int(chanInfo.LastCheckedPostID))
 	if err != nil {
 		return nil, err
 	}
@@ -41,9 +61,13 @@ func (t *telegramService) getNewChannelPosts(ctx context.Context, username strin
 	return posts, nil
 }
 
-func (t *telegramService) getChatInfo(ctx context.Context, username string) (*models.ChatFullInfo, error) {
+func (t *telegramService) getChatInfo(ctx context.Context, chanInfo *entity.ChannelInfo) (*models.ChatFullInfo, error) {
 
-	info, err := t.tgcBot.GetChatInfo(ctx, username)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	info, err := t.tgcBot.GetChatInfo(ctx, chanInfo.ChannelUsername)
 	if err != nil {
 		return nil, err
 	}
@@ -56,6 +80,10 @@ func (t *telegramService) validateChannel(ctx context.Context, identificator str
 	username, err := t.extractUsernameFromIdentificator(identificator)
 	if err != nil {
 		return false, fmt.Errorf("Incorrect channel identificator: %w", err)
+	}
+
+	if ctx.Err() != nil {
+		return false, ctx.Err()
 	}
 
 	chat, err := t.tgcBot.GetChatInfo(ctx, username)

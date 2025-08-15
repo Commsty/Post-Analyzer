@@ -15,6 +15,11 @@ func (t *TelegramUserClient) GetNewChannelPosts(ctx context.Context, username st
 	client := t.createRawClient(t.appID, t.appHash)
 
 	err := client.Run(ctx, func(ctx context.Context) error {
+
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
 		var err error
 		posts, err = t.getNewChannelPosts(ctx, client, username, lastReadID)
 		return err
@@ -31,11 +36,17 @@ func (t *TelegramUserClient) getNewChannelPosts(ctx context.Context, client *tel
 
 	api := tg.NewClient(client)
 
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	channel, err := t.resolveChannel(ctx, api, username)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to fetch channel info: %w", err)
 	}
 
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	history, err := t.getChannelHistory(ctx, api, channel, lastReadID)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get channel history: %w", err)
@@ -47,6 +58,10 @@ func (t *TelegramUserClient) getNewChannelPosts(ctx context.Context, client *tel
 }
 
 func (t *TelegramUserClient) resolveChannel(ctx context.Context, api *tg.Client, username string) (*tg.Channel, error) {
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	resolved, err := api.ContactsResolveUsername(ctx,
 		&tg.ContactsResolveUsernameRequest{
@@ -66,6 +81,10 @@ func (t *TelegramUserClient) resolveChannel(ctx context.Context, api *tg.Client,
 }
 
 func (t *TelegramUserClient) getChannelHistory(ctx context.Context, api *tg.Client, channel *tg.Channel, lastReadID int) (tg.MessagesMessagesClass, error) {
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	history, err := api.MessagesGetHistory(ctx,
 		&tg.MessagesGetHistoryRequest{

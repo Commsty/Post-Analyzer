@@ -33,25 +33,25 @@ func NewTelegramUserClient(appID int, appHash string, sessionPath string) (*Tele
 		sessionPath: sessionPath,
 	}
 
-	ctxAuth, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	authCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := client.authenticate(ctxAuth); err != nil {
+	if err := client.authenticate(authCtx); err != nil {
 		return nil, fmt.Errorf("Authentication error: %w", err)
 	}
 
 	return client, nil
 }
 
-func (t *TelegramUserClient) authenticate(ctxAuth context.Context) error {
+func (t *TelegramUserClient) authenticate(ctx context.Context) error {
 
-	if ctxAuth.Err() != nil {
-		return fmt.Errorf("Authentication cancelled before start: %w", ctxAuth.Err())
+	if ctx.Err() != nil {
+		return fmt.Errorf("Authentication cancelled before start: %w", ctx.Err())
 	}
 
 	authClient := t.createRawClient(t.appID, t.appHash)
 
-	return authClient.Run(ctxAuth, func(ctx context.Context) error {
+	return authClient.Run(ctx, func(ctx context.Context) error {
 
 		if ctx.Err() != nil {
 			return fmt.Errorf("Authentication cancelled before callback return: %w", ctx.Err())
