@@ -14,9 +14,9 @@ import (
 )
 
 type telegramProvider interface {
-	sendMessage(context.Context, *entity.ChannelInfo, string) (*models.Message, error)
-	getNewChannelPosts(context.Context, *entity.ChannelInfo) ([]*tg.Message, error)
-	getChatInfo(context.Context, *entity.ChannelInfo) (*models.ChatFullInfo, error)
+	sendMessage(context.Context, *entity.Subscription, string) (*models.Message, error)
+	getNewChannelPosts(context.Context, *entity.Subscription) ([]*tg.Message, error)
+	getChatInfo(context.Context, *entity.Subscription) (*models.ChatFullInfo, error)
 	validateChannel(context.Context, string) (bool, error)
 	extractUsernameFromIdentificator(string) (string, error)
 }
@@ -33,13 +33,13 @@ func NewTelegramProvider(tgcUser *user.TelegramUserClient, tgcBot *bot.TelegramB
 	}
 }
 
-func (t *telegramService) sendMessage(ctx context.Context, chanInfo *entity.ChannelInfo, text string) (*models.Message, error) {
+func (t *telegramService) sendMessage(ctx context.Context, sub *entity.Subscription, text string) (*models.Message, error) {
 
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	msg, err := t.tgcBot.SendMessage(ctx, chanInfo.ChatID, text)
+	msg, err := t.tgcBot.SendMessage(ctx, sub.ChatID, text)
 	if err != nil {
 		return nil, err
 	}
@@ -47,13 +47,13 @@ func (t *telegramService) sendMessage(ctx context.Context, chanInfo *entity.Chan
 	return msg, nil
 }
 
-func (t *telegramService) getNewChannelPosts(ctx context.Context, chanInfo *entity.ChannelInfo) ([]*tg.Message, error) {
+func (t *telegramService) getNewChannelPosts(ctx context.Context, sub *entity.Subscription) ([]*tg.Message, error) {
 
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	posts, err := t.tgcUser.GetNewChannelPosts(ctx, chanInfo.ChannelUsername, int(chanInfo.LastCheckedPostID))
+	posts, err := t.tgcUser.GetNewChannelPosts(ctx, sub.ChannelUsername, int(sub.LastCheckedPostID))
 	if err != nil {
 		return nil, err
 	}
@@ -61,13 +61,13 @@ func (t *telegramService) getNewChannelPosts(ctx context.Context, chanInfo *enti
 	return posts, nil
 }
 
-func (t *telegramService) getChatInfo(ctx context.Context, chanInfo *entity.ChannelInfo) (*models.ChatFullInfo, error) {
+func (t *telegramService) getChatInfo(ctx context.Context, sub *entity.Subscription) (*models.ChatFullInfo, error) {
 
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
-	info, err := t.tgcBot.GetChatInfo(ctx, chanInfo.ChannelUsername)
+	info, err := t.tgcBot.GetChatInfo(ctx, sub.ChannelUsername)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (t *telegramService) validateChannel(ctx context.Context, identificator str
 
 	username, err := t.extractUsernameFromIdentificator(identificator)
 	if err != nil {
-		return false, fmt.Errorf("Incorrect channel identificator: %w", err)
+		return false, fmt.Errorf("incorrect channel identificator: %w", err)
 	}
 
 	if ctx.Err() != nil {
@@ -88,7 +88,7 @@ func (t *telegramService) validateChannel(ctx context.Context, identificator str
 
 	chat, err := t.tgcBot.GetChatInfo(ctx, username)
 	if err != nil {
-		return false, fmt.Errorf("No public channels with username \"%s\"", username)
+		return false, fmt.Errorf("no public channels with username \"%s\"", username)
 	}
 
 	ch, us := chat.Type, chat.Username
@@ -114,11 +114,11 @@ func (t *telegramService) extractUsernameFromIdentificator(identificator string)
 	identificator = strings.Split(identificator, "/")[0]
 
 	if len(identificator) < 5 {
-		return "", fmt.Errorf("Username too short")
+		return "", fmt.Errorf("username too short")
 	}
 
 	if !regexp.MustCompile(`^[a-zA-Z0-9_]+$`).MatchString(identificator) {
-		return "", fmt.Errorf("Invalid characters in username")
+		return "", fmt.Errorf("invalid characters in username")
 	}
 
 	return identificator, nil

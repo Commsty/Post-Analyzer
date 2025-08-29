@@ -37,7 +37,7 @@ func NewTelegramUserClient(appID int, appHash string, sessionPath string) (*Tele
 	defer cancel()
 
 	if err := client.authenticate(authCtx); err != nil {
-		return nil, fmt.Errorf("Authentication error: %w", err)
+		return nil, fmt.Errorf("authentication error: %w", err)
 	}
 
 	return client, nil
@@ -46,7 +46,7 @@ func NewTelegramUserClient(appID int, appHash string, sessionPath string) (*Tele
 func (t *TelegramUserClient) authenticate(ctx context.Context) error {
 
 	if ctx.Err() != nil {
-		return fmt.Errorf("Authentication cancelled before start: %w", ctx.Err())
+		return fmt.Errorf("authentication cancelled before start: %w", ctx.Err())
 	}
 
 	authClient := t.createRawClient(t.appID, t.appHash)
@@ -54,7 +54,7 @@ func (t *TelegramUserClient) authenticate(ctx context.Context) error {
 	return authClient.Run(ctx, func(ctx context.Context) error {
 
 		if ctx.Err() != nil {
-			return fmt.Errorf("Authentication cancelled before callback return: %w", ctx.Err())
+			return fmt.Errorf("authentication cancelled before callback return: %w", ctx.Err())
 		}
 
 		return authClient.Auth().IfNecessary(ctx, t.createAuthFlow())

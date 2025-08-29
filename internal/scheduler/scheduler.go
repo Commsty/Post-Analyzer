@@ -39,15 +39,15 @@ func (s *Scheduler) ParseTimeString(timeString string) (int, int, error) {
 	var hour, minute int
 	n, err := fmt.Sscanf(timeString, "%d:%d", &hour, &minute)
 	if err != nil || n != 2 {
-		return -1, -1, fmt.Errorf("Invalid time format. Expected format: HH:MM")
+		return -1, -1, fmt.Errorf("invalid time format. Expected format: HH:MM")
 	}
 
 	if hour < 0 || hour > 23 {
-		return -1, -1, fmt.Errorf("Hour value must be between 0 and 23")
+		return -1, -1, fmt.Errorf("hour value must be between 0 and 23")
 	}
 
 	if minute < 0 || minute > 59 {
-		return -1, -1, fmt.Errorf("Minute value must be between 0 and 59")
+		return -1, -1, fmt.Errorf("minute value must be between 0 and 59")
 	}
 
 	return hour, minute, nil

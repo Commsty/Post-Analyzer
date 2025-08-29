@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	defaultModel string = "openai/gpt-oss-20b:free"
+	defaultModel string = "deepseek/deepseek-chat-v3.1:free"
 	defaultURL   string = "https://openrouter.ai/api/v1/chat/completions"
 )
 
@@ -21,13 +21,21 @@ type OpenRouterClient struct {
 }
 
 type openRouterRequest struct {
-	Model    string    `json:"model"`
-	Messages []message `json:"messages"`
+	Model       string    `json:"model"`
+	Messages    []message `json:"messages"`
+	Reasoning   Reasoning `json:"reasoning"`
+	Verbosity   string    `json:"verbosity"`
+	Temperature float32   `json:"temperature"`
+	ToPP        float32   `json:"top_p"`
 }
 
 type message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+}
+
+type Reasoning struct {
+	Enabled bool `json:"enabled"`
 }
 
 type openRouterResponse struct {
@@ -48,15 +56,26 @@ func NewOpenRouterClient(apikey string) *OpenRouterClient {
 	}
 }
 
-func (c *OpenRouterClient) AnalyzeText(ctx context.Context, text, prompt string) (string, error) {
+func (c *OpenRouterClient) AnalyzeText(ctx context.Context, text, sysPrompt string) (string, error) {
 
-	fullPrompt := fmt.Sprintf(prompt, text)
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
+	userPrompt := "Проанализируй следующие посты из Telegram-каналов и выдай краткую выжимку по заданным правилам:\n" + text
 
 	reqBody := openRouterRequest{
 		Model: defaultModel,
 		Messages: []message{
-			{Role: "user", Content: fullPrompt},
+			{Role: "system", Content: sysPrompt},
+			{Role: "user", Content: userPrompt},
 		},
+		Reasoning: Reasoning{
+			Enabled: false,
+		},
+		Verbosity:   "low",
+		Temperature: 0.1,
+		ToPP:        0.5,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -66,15 +85,19 @@ func (c *OpenRouterClient) AnalyzeText(ctx context.Context, text, prompt string)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", fmt.Errorf("Reqest creating error: %w", err)
+		return "", fmt.Errorf("reqest creating error: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("Sending request error: %w", err)
+		return "", fmt.Errorf("sending request error: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -84,12 +107,12 @@ func (c *OpenRouterClient) AnalyzeText(ctx context.Context, text, prompt string)
 
 	var result openRouterResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("Decoding response failed: %w", err)
+		return "", fmt.Errorf("decoding response failed: %w", err)
 	}
 
 	if len(result.Choices) > 0 {
 		return result.Choices[0].Message.Content, nil
 	}
 
-	return "", fmt.Errorf("Empty response")
+	return "", fmt.Errorf("empty response")
 }

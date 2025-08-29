@@ -41,7 +41,7 @@ func (t *TelegramUserClient) getNewChannelPosts(ctx context.Context, client *tel
 	}
 	channel, err := t.resolveChannel(ctx, api, username)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to fetch channel info: %w", err)
+		return nil, fmt.Errorf("failed to fetch channel info: %w", err)
 	}
 
 	if ctx.Err() != nil {
@@ -49,7 +49,7 @@ func (t *TelegramUserClient) getNewChannelPosts(ctx context.Context, client *tel
 	}
 	history, err := t.getChannelHistory(ctx, api, channel, lastReadID)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to get channel history: %w", err)
+		return nil, fmt.Errorf("failed to get channel history: %w", err)
 	}
 
 	posts := t.filterValidMessages(history)

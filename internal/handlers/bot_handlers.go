@@ -13,10 +13,10 @@ import (
 )
 
 type BotHandler struct {
-	service service.ChannelService
+	service service.SubscriptionService
 }
 
-func NewBotHandler(service service.ChannelService) *BotHandler {
+func NewBotHandler(service service.SubscriptionService) *BotHandler {
 	return &BotHandler{service: service}
 }
 
@@ -54,12 +54,12 @@ func (h *BotHandler) MonitorHandler(ctx context.Context, b *bot.Bot, update *mod
 	}
 
 	link, timeString := args[0], args[1]
-	chanInfo := &entity.ChannelInfo{
+	sub := &entity.Subscription{
 		ChatID:            chatID,
 		LastCheckedPostID: -1,
 	}
 
-	err := h.service.AddChannel(monitorCtx, link, timeString, chanInfo)
+	err := h.service.AddSubscription(monitorCtx, link, timeString, sub)
 
 	if err != nil {
 		_, err := b.SendMessage(monitorCtx, &bot.SendMessageParams{
