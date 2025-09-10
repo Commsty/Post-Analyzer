@@ -33,7 +33,7 @@ const (
 	);`
 )
 
-func EnshureSchema(ctx context.Context, pool *pgxpool.Pool) error {
+func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 
 	if _, err := pool.Exec(ctx, createChannelTable); err != nil {
 		return err

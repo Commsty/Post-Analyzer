@@ -2,10 +2,28 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
-	"post-analyzer/internal/entity"
+	"post-analyzer/internal/domain/entity"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+var (
+	ErrTimeLimit = errors.New("db query time limit reached")
+
+	ErrTransactionFailed = errors.New("transaction failed")
+	ErrRollbackFailed    = errors.New("rollback failed")
+	ErrCommitFailed      = errors.New("commiting transaction failed")
+
+	ErrSelectionFailed = errors.New("db selection failed")
+	ErrInsertionFailed = errors.New("db insertion failed")
+	ErrUpdateFailed    = errors.New("db update failed")
+	ErrDeletingFailed  = errors.New("db deleting failed")
+
+	ErrMappingFailed       = errors.New("mapping to subscription struct failed")
+	ErrReadingStreamFailed = errors.New("error during stream reading")
 )
 
 type SubscriptionRepository interface {
@@ -28,19 +46,19 @@ func NewSubscriptionRepository(database *pgxpool.Pool) SubscriptionRepository {
 func (r *subscriptionRepository) AddSubscription(ctx context.Context, sub *entity.Subscription) error {
 
 	if err := ctx.Err(); err != nil {
-		return err
+		return ErrTimeLimit
 	}
 
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %s", ErrTransactionFailed, err)
 	}
 
 	defer func() {
 		if err != nil {
-			rollbackError := tx.Rollback(ctx)
-			if rollbackError != nil {
-				log.Printf("Rollback failed: %v", rollbackError)
+			err := tx.Rollback(ctx)
+			if err != nil {
+				log.Printf("%v: %s", ErrRollbackFailed, err)
 			}
 		}
 	}()
@@ -54,7 +72,7 @@ func (r *subscriptionRepository) AddSubscription(ctx context.Context, sub *entit
 		`,
 		sub.ChannelID, sub.ChannelUsername)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %s", ErrInsertionFailed, err)
 	}
 
 	_, err = tx.Exec(ctx,
@@ -64,17 +82,21 @@ func (r *subscriptionRepository) AddSubscription(ctx context.Context, sub *entit
 		`,
 		sub.ChatID, sub.ChannelID, sub.LastCheckedPostID, sub.SendingTime, sub.ScheduleID)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrInsertionFailed, err)
 	}
 
 	err = tx.Commit(ctx)
-	return err
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrCommitFailed, err)
+	}
+
+	return nil
 }
 
 func (r *subscriptionRepository) GetSubscriptions(ctx context.Context, chatID int64) ([]*entity.Subscription, error) {
 
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, ErrTimeLimit
 	}
 
 	rows, err := r.db.Query(ctx,
@@ -85,7 +107,7 @@ func (r *subscriptionRepository) GetSubscriptions(ctx context.Context, chatID in
 		`,
 		chatID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %s", ErrSelectionFailed, err)
 	}
 	defer rows.Close()
 
@@ -102,14 +124,14 @@ func (r *subscriptionRepository) GetSubscriptions(ctx context.Context, chatID in
 			&sub.ScheduleID,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %s", ErrMappingFailed, err)
 		}
 
 		subs = append(subs, &sub)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %s", ErrReadingStreamFailed, err)
 	}
 
 	return subs, nil
@@ -118,18 +140,18 @@ func (r *subscriptionRepository) GetSubscriptions(ctx context.Context, chatID in
 func (r *subscriptionRepository) UpdateSubscription(ctx context.Context, sub *entity.Subscription) error {
 
 	if err := ctx.Err(); err != nil {
-		return err
+		return ErrTimeLimit
 	}
 
 	_, err := r.db.Exec(ctx,
 		`
 		UPDATE subscription
-		SET last_checked_id = $1
-		WHERE chat_id = $2 AND channel_id = $3 AND send_time = $4
+		SET last_checked_id = $1, schedule_id = $2
+		WHERE chat_id = $3 AND channel_id = $4 AND send_time = $5
 		`,
-		sub.LastCheckedPostID, sub.ChatID, sub.ChannelID, sub.SendingTime)
+		sub.LastCheckedPostID, sub.ScheduleID, sub.ChatID, sub.ChannelID, sub.SendingTime)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %s", ErrUpdateFailed, err)
 	}
 
 	return nil
@@ -148,7 +170,7 @@ func (r *subscriptionRepository) DeleteSubscription(ctx context.Context, sub *en
 		`,
 		sub.ChatID, sub.ChannelID, sub.SendingTime)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %s", ErrDeletingFailed, err)
 	}
 
 	return nil

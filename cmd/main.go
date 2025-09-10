@@ -4,30 +4,32 @@ import (
 	"context"
 	"log"
 	"os"
-	"post-analyzer/internal/client/ai"
-	"post-analyzer/internal/client/telegram/bot"
-	"post-analyzer/internal/client/telegram/user"
-	database "post-analyzer/internal/db"
-	"post-analyzer/internal/handlers"
-	"post-analyzer/internal/repository"
-	"post-analyzer/internal/scheduler"
-	"post-analyzer/internal/service"
 	"strconv"
 	"time"
 
-	tgBot "github.com/go-telegram/bot"
+	"post-analyzer/internal/adapters/openrouter"
+	"post-analyzer/internal/adapters/telegram/bot"
+	"post-analyzer/internal/adapters/telegram/user"
+	"post-analyzer/internal/controllers"
+	database "post-analyzer/internal/infrastructure/db"
+	"post-analyzer/internal/infrastructure/notifier"
+	"post-analyzer/internal/infrastructure/repository"
+	"post-analyzer/internal/infrastructure/scheduler"
+	"post-analyzer/internal/usecase"
+
+	tgbot "github.com/go-telegram/bot"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
 
-func main() {
-	var err error
-
-	// loading env variables
-	if err = godotenv.Load(); err != nil {
-		log.Fatalf("Failed to load env variables: %v", err)
+func init() {
+	if err := godotenv.Load(); err != nil {
+		panic("Failed to load startup configuration:\n" + err.Error())
 	}
+}
 
+func main() {
+	// loading configuration
 	var token string = os.Getenv("TELEGRAM_BOT_TOKEN")
 	appID, err := strconv.Atoi(os.Getenv("APP_ID"))
 	if err != nil {
@@ -47,7 +49,7 @@ func main() {
 	}
 	defer db.Close()
 
-	if err = database.EnshureSchema(connectionCtx, db); err != nil {
+	if err = database.EnsureSchema(connectionCtx, db); err != nil {
 		log.Fatalf("Failed to create databse tables: %v", err)
 	}
 
@@ -55,7 +57,7 @@ func main() {
 	repo := repository.NewSubscriptionRepository(db)
 
 	// bot registartion
-	botHandler, err := tgBot.New(token)
+	botHandler, err := tgbot.New(token)
 	if err != nil {
 		log.Fatalf("Failed to register bot: %v", err)
 	}
@@ -68,22 +70,23 @@ func main() {
 	}
 
 	// OpenRouter client
-	aiClient := ai.NewOpenRouterClient(openRouterApiKey)
+	aiClient := openrouter.NewOpenRouterClient(openRouterApiKey)
 
 	// scheduler
 	scheduler := scheduler.NewScheduler()
 
-	// internal services
-	telegramProvider := service.NewTelegramProvider(userClient, botClient)
-	analysisProvider := service.NewAnalysisProvider(aiClient)
-	service := service.NewSubscriptionService(repo, scheduler, analysisProvider, telegramProvider)
+	// notifier
+	notifier := notifier.NewNotifier(botClient)
+
+	// usecase manager
+	ucManager := usecase.NewUseCaseManager(userClient, repo, scheduler, aiClient, notifier)
 
 	// bot messages handler
-	handler := handlers.NewBotHandler(service)
+	handler := controllers.NewBotController(ucManager)
 
 	// bot commands registration
-	botHandler.RegisterHandler(tgBot.HandlerTypeMessageText, "/start", tgBot.MatchTypeExact, handler.StartHandler)
-	botHandler.RegisterHandler(tgBot.HandlerTypeMessageText, "/monitor", tgBot.MatchTypePrefix, handler.MonitorHandler)
+	botHandler.RegisterHandler(tgbot.HandlerTypeMessageText, "/start", tgbot.MatchTypeExact, handler.StartHandler)
+	botHandler.RegisterHandler(tgbot.HandlerTypeMessageText, "/monitor", tgbot.MatchTypePrefix, handler.MonitorHandler)
 
 	scheduler.Start()
 	botHandler.Start(context.Background())
