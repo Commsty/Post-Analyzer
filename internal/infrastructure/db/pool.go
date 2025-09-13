@@ -4,23 +4,23 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
+	"post-analyzer/config"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func Init(connectionCtx context.Context) (*pgxpool.Pool, error) {
+func Init(connectionCtx context.Context, cfg *config.AppConfig) (*pgxpool.Pool, error) {
 
 	// configurating connection
 	connectionString := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASS"),
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
-		os.Getenv("DB_NAME"),
-		os.Getenv("SSL_MODE"),
+		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
+		cfg.Database.User,
+		cfg.Database.Password,
+		cfg.Database.Host,
+		cfg.Database.Port,
+		cfg.Database.Name,
+		cfg.Database.SSLMode,
 	)
 
 	config, err := pgxpool.ParseConfig(connectionString)

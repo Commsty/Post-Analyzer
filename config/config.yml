@@ -1,0 +1,10 @@
+app:
+  name: "PostAnalyzer"
+  version: "1.0"
+
+database:
+  host: "localhost"
+  port : 5432
+  name: "analyzerdb"
+  user: "analyzeruser"
+  ssl_mode: "disable"

@@ -3,15 +3,14 @@ package main
 import (
 	"context"
 	"log"
-	"os"
-	"strconv"
 	"time"
 
+	"post-analyzer/config"
 	"post-analyzer/internal/adapters/openrouter"
 	"post-analyzer/internal/adapters/telegram/bot"
 	"post-analyzer/internal/adapters/telegram/user"
 	"post-analyzer/internal/controllers"
-	database "post-analyzer/internal/infrastructure/db"
+	dtb "post-analyzer/internal/infrastructure/db"
 	"post-analyzer/internal/infrastructure/notifier"
 	"post-analyzer/internal/infrastructure/repository"
 	"post-analyzer/internal/infrastructure/scheduler"
@@ -19,37 +18,29 @@ import (
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/joho/godotenv"
+	_ "github.com/joho/godotenv/autoload"
 )
 
-func init() {
-	if err := godotenv.Load(); err != nil {
-		panic("Failed to load startup configuration:\n" + err.Error())
-	}
-}
+const cfgPath = "config/config.yml"
 
 func main() {
 	// loading configuration
-	var token string = os.Getenv("TELEGRAM_BOT_TOKEN")
-	appID, err := strconv.Atoi(os.Getenv("APP_ID"))
+	cfg, err := config.LoadConfig(cfgPath)
 	if err != nil {
-		log.Fatalf("Failed to get appID: %v", err)
+		panic("failed to load config:\n" + err.Error())
 	}
-	var appHash string = os.Getenv("APP_HASH")
-	var sessionPath string = os.Getenv("SESSION_PATH")
-	var openRouterApiKey string = os.Getenv("OPEN_ROUTER_API_KEY")
 
 	// db connection && check-up
 	var db *pgxpool.Pool
 	connectionCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if db, err = database.Init(connectionCtx); err != nil {
+	if db, err = dtb.Init(connectionCtx, cfg); err != nil {
 		log.Fatalf("Failed to connect database: %v", err)
 	}
 	defer db.Close()
 
-	if err = database.EnsureSchema(connectionCtx, db); err != nil {
+	if err = dtb.EnsureSchema(connectionCtx, db); err != nil {
 		log.Fatalf("Failed to create databse tables: %v", err)
 	}
 
@@ -57,20 +48,20 @@ func main() {
 	repo := repository.NewSubscriptionRepository(db)
 
 	// bot registartion
-	botHandler, err := tgbot.New(token)
+	botHandler, err := tgbot.New(cfg.API.Telegram.BotToken)
 	if err != nil {
 		log.Fatalf("Failed to register bot: %v", err)
 	}
 
 	// telegram clients
 	botClient := bot.NewTelegramBotClient(botHandler)
-	userClient, err := user.NewTelegramUserClient(appID, appHash, sessionPath)
+	userClient, err := user.NewTelegramUserClient(cfg.API.Telegram.AppID, cfg.API.Telegram.AppHash, cfg.API.Telegram.SessionPath)
 	if err != nil {
 		log.Fatalf("Failed to create user client: %v", err)
 	}
 
 	// OpenRouter client
-	aiClient := openrouter.NewOpenRouterClient(openRouterApiKey)
+	aiClient := openrouter.NewOpenRouterClient(cfg.API.OpenRouter.APIKey)
 
 	// scheduler
 	scheduler := scheduler.NewScheduler()
